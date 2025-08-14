@@ -7,10 +7,10 @@ A comprehensive deep learning framework for classifying motor tasks from EEG sig
 This project implements EEGNet architecture for classifying motor tasks from 2-channel EEG data (TP9, TP10). The system is designed for brain-computer interface applications and motor research.
 
 
-## Project Structure (Decoder)
+## Project Structure
 
 ```
-decoder/
+Open-Close/
 ├── dataset.py              # Data loading and preprocessing classes
 ├── model.py                # EEGNet model architectures
 ├── training.py             # Training loops and evaluation functions
@@ -19,19 +19,18 @@ decoder/
 ├── main.py                 # Basic binary classification training
 ├── test.py                 # Basic model testing
 ├── realtime.py             # Use unsegmented data and trained model to do prediction
-├── normalization_params/  # Saved normalization parameters
-└── ...
+└── normalization_params/  # Saved normalization parameters
 ```
 
 
 ### Prerequisites
-Install the same environment using:
+Install the same environmrnt using:
 ```bash
-conda env create -f decoder/environment.yml -n your_env_name
+conda env create -f environment.yml -n your_env_name
 ```
 OR
 ```bash
-pip install -r decoder/requirements.txt
+pip install -r requirements.txt
 ```
 
 ### Basic Usage
@@ -39,13 +38,18 @@ pip install -r decoder/requirements.txt
 1. **Prepare your data**: Organize EEG data in the expected directory structure:
    For training and testing
    ```
-   data/
+   data_dir/
    ├──session1/
-   │   └── exp_1/  # Fists experiment
-   │       ├── openclosefists_run1_TP9.csv
-   │       ├── openclosefists_run1_TP10.csv
-   │       ├── openclosefists_run1_label.csv
-   │       └── ...
+   │   ├── exp_1/  # Fists experiment
+   │   │   ├── openclosefists_run1_TP9.csv
+   │   │   ├── openclosefists_run1_TP10.csv
+   │   │   ├── openclosefists_run1_label.csv
+   │   │   └── ...
+   │   └── exp_2/  # Feet experiment
+   │      ├── openclosefeet_run1_TP9.csv
+   │      ├── openclosefeet_run1_TP10.csv
+   │      ├── openclosefeet_run1_label.csv
+   │      └── ...
    └──session2/
       └── ...
    ```
@@ -69,6 +73,7 @@ pip install -r decoder/requirements.txt
 ## Classification Approaches
 Separate models for each motor task:
 - **Fists Model**: Rest (0) vs Open/Close Fists (1)
+- **Feet Model**: Rest (0) vs Open/Close Feet (1)
 
 ## Model Architecture
 

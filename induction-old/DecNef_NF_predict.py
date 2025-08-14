@@ -3,13 +3,10 @@ import os
 import numpy as np
 from mne import Epochs, find_events
 from matplotlib import pyplot as plt
-from model_utils import model #for traditionial ML model
+from model_utils import model
 import utils
 import re
 from sklearn.model_selection import train_test_split
-#for eegnet
-import torch
-from eegnet_model import create_eegnet_model #for EEGnet
 
 #based on main.py in the decoder
 def remove_outliers_with_mean(data, threshold):
@@ -60,34 +57,13 @@ def decoder_predict(X_input:np.ndarray, trained_model: model, qc:bool=False, thr
     #     X_input = remove_outliers_with_mean(X_input, threshold=threshold)
     # if filter:
     #     X_input = bandpass_filter_ndarray(X_input)
-    #hxf 8/11/2025
-    if hasattr(trained_model, "best_model_"): #for traditional ML models
-        # expand 1 dimension to use sklearn structure
-        X_input = X_input[np.newaxis, ...] # Prepare input: (2, 1024) -> (1, 2, 1024)
-        print(X_input.shape)
-        prob = trained_model.best_model_.predict_proba(X_input)[0] # （sampleSize, n_classes), get the first sample, i.e., [0]
-        prob_class1 = prob[1] # prob[0]: class0, prob[0]: class1, select the probability for class 1
-        pred_label = trained_model.best_model_.predict(X_input)[0]
-    else: #eegnet
-        # Load model
-        model = create_eegnet_model(task_type='binary', num_classes=1, samples=X_input.shape[1]) #1024
-        model.load_state_dict(trained_model) #or torch.load(trained_model_path, map_location=device)
-        model = model.to(device)
-        model.eval()
-        
-        # Prepare input: (2, 1024) -> (1, 1, 2, 1024)
-        X_input = X_input[np.newaxis, np.newaxis, ...]  # Add batch and EEGNet format dimensions
-        X_tensor = torch.FloatTensor(X_input).to(device)
-        print(X_tensor.shape)
-        
-        # Predict
-        with torch.no_grad(): #Do not track gradients for the operations inside this block to save memory.
-            output = model(X_tensor)
-            prob = torch.sigmoid(output).cpu().numpy()[0, 0]  # Get probability for single sample
-        
-        prob_class1 = prob  # Probability for class 1
-        pred_label = int(prob > 0.5)          
 
+    # expand 1 dimension to use sklearn structure
+    X_input = X_input[np.newaxis, ...]
+    print(X_input.shape)
+    prob = trained_model.best_model_.predict_proba(X_input)[0] # （sampleSize, n_classes), get the first sample, i.e., [0]
+    prob_class1 = prob[1] # prob[0]: class0, prob[0]: class1, select the probability for class 1
+    pred_label = trained_model.best_model_.predict(X_input)[0]
     return prob_class1, pred_label
 
 
@@ -95,20 +71,9 @@ if __name__ == "__main__":
     import pickle
     # sample usage: decoder_predict
     #model_file = "my_model_exp_2_sub_1.pkl" #for eye blink model
-    #model_file = "openCloseFistsFeet_model_exp_1_sub_1.pkl" #open/close fists task
-    model_file = r"D:\decoder\best_fists_eegnet_model.pth" #open/close fists task
-    import time
-    start = time.time()
-    if model_file.endswith(".pth"): #it's a pytorch model format
-        # Set device    
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        with open(model_file, 'rb') as f:
-            loaded_model=torch.load(f, map_location=device) #for eegnet
-    else: #traditional ML model
-         with open(model_file, 'rb') as f:
-            loaded_model = pickle.load(f) 
-    end = time.time()
-    print(f"Elapsed time: {end - start:.4f} seconds")
+    model_file = "openCloseFistsFeet_model_exp_1_sub_1.pkl" #open/close fists task
+    with open(model_file, 'rb') as f:
+        loaded_model = pickle.load(f)
     
     # example_input = all_X[0][0][3]
     # y_prob, y_pred = decoder_predict(X_input=example_input, trained_model=loaded_model)
@@ -116,15 +81,8 @@ if __name__ == "__main__":
 
     #get segment_4s from either .csv file or real-time
     """Run one 4 s segment (1024×4) through decoder_predict."""
-    # Get segment_4s from either .csv file or real-time
-    # Simulating segment_4s data
-    segment_4s = np.random.randn(1024, 4) * 1e-5  # Change this to real-time input
     X = segment_4s[:, [0, 3]].T  # TP9 & TP10
-    #import time
-    start = time.time()
-    y_prob, y_pred =decoder_predict(X_input=X, trained_model=loaded_model) #size(X_input)=(2,1024s)
-    end = time.time() #Elapsed time: 0.0659 seconds
-    print(f"Elapsed time: {end - start:.4f} seconds")
+    y_prob, y_pred =decoder_predict(X_input=X, trained_model=loaded_model)
     print(f'prob for target class_1 is {y_prob}, predicted_label is {y_pred}')
 
 

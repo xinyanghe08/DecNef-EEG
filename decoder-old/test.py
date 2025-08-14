@@ -6,12 +6,12 @@ from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 
 from dataset import TwoChannelEEGDataset, EEGNetDataset
-from eegnet_model import create_eegnet_model
+from model import create_eegnet_model
 from utils import set_all_seeds
 from evaluation import evaluate_simple_model, plot_results_short
-import os
 
-def main(test_para,model_path,segment_len,exp_number=1):
+
+def main(exp_number=1):
     # Set seeds for reproducibility
     set_all_seeds(42)
     
@@ -27,14 +27,14 @@ def main(test_para,model_path,segment_len,exp_number=1):
         task = "openclosefeet"
         experiment_name = "feet"       
 
-    #data_dir = r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session2"
+    data_dir = r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session2"
 
     test_dataset = TwoChannelEEGDataset(
-        data_dir=test_para["dataset_path"],
+        data_dir=data_dir,
         exp_number=exp_number,
-        run_number=test_para["run_number"],  # load runs
+        run_number=[1],  # load runs
         task=task,
-        window_size=segment_len,
+        window_size=1024,
         debug=False,
         normalize=True #False
         )
@@ -46,15 +46,13 @@ def main(test_para,model_path,segment_len,exp_number=1):
 
     # Create new data loaders
     batch_size=32
-    #batch_size=112
     test_loader = DataLoader(eegnet_test_dataset, batch_size=batch_size, shuffle=False)
 
-    model_path_file=os.path.join(model_path,f"best_{experiment_name}_eegnet_model.pth")
-    #model_path_file = f"C:/Users/xhe/Documents/GitHub/DecNef-EEG/decoder/best_{experiment_name}_eegnet_model.pth"
-    ##model_path_file = f"C:/Github/Open-Close/best_{experiment_name}_eegnet_model.pth"  # Path to saved model weights
+    model_path = f"C:/Users/xhe/Documents/GitHub/DecNef-EEG/decoder/best_{experiment_name}_eegnet_model.pth"
+    #model_path = f"C:/Github/Open-Close/best_{experiment_name}_eegnet_model.pth"  # Path to saved model weights
 
-    model = create_eegnet_model(task_type='binary', num_classes=1, samples=segment_len).to(device)
-    model.load_state_dict(torch.load(model_path_file, map_location=device))
+    model = create_eegnet_model(task_type='binary', num_classes=1, samples=1024).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
 
     # Load model and evaluate
@@ -82,16 +80,6 @@ def main(test_para,model_path,segment_len,exp_number=1):
 
 
 if __name__ == "__main__":
-    model_path = r"D:\decoder" #"best_fists_eegnet_model.pth"
-    #model_path_file = f"C:/Users/xhe/Documents/GitHub/DecNef-EEG/decoder/best_{experiment_name}_eegnet_model.pth"
-    #model_path_file = f"C:/Github/Open-Close/best_{experiment_name}_eegnet_model.pth"  # Path to saved model weights
-    # test_dataset_path=r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session2"      
-    test_dataset_path=r"D:\decoder\Data\sub-EB-43\Muse_data_OpenCloseFists_session2_segmented"      
-    test_para = {
-    "dataset_path": test_dataset_path,
-    "run_number": [1] #first run for testing
-    }
-    segment_len=1024 #4s, sampling rate: 256hz 
-    main(test_para,model_path,segment_len,exp_number=1) #open/close fists
-    # main(test_para,model_path,exp_number=2) #open/close feet
+    main(exp_number=1)
+    # main(exp_number=2)
     

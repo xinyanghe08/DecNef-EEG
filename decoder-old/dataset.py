@@ -27,7 +27,7 @@ class TwoChannelEEGDataset(Dataset):
         self.normalization_params = normalization_params
         self.computed_norm_params = None
 
-        if isinstance(run_number, int): #convert to a list if it's an int
+        if isinstance(run_number, int):
             run_number = [run_number]
 
         # First load all data

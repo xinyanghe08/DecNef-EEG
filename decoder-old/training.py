@@ -6,7 +6,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import json
 import os
 from datetime import datetime
-from eegnet_model import EEGNetTrainer
+from model import EEGNetTrainer
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import label_binarize
 

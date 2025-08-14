@@ -3,7 +3,6 @@ import time
 import datetime
 import numpy as np
 import subprocess
-import threading
 import os
 import psutil
 import muselsl.winctrlc
@@ -13,95 +12,103 @@ from time import strftime, gmtime
 from multiprocessing import shared_memory
 
 # %% Shared Memory Setup for Latest 12 Seconds of EEG Data (4 Channels + Timestamp)
-eeg_rows = int(12 * 256)   # 3072 rows
-eeg_cols = 5               # 4 EEG channels + 1 timestamp column
+# At 256 Hz, 12 seconds correspond to 3072 rows.
+eeg_rows = int(12 * 256)  # 3072 rows
+eeg_cols = 5              # 4 EEG channels + 1 timestamp column
 dtype = np.float32
 
-# Create shared memory for EEG (only EEG channels + timestamp)
-shm_eeg = shared_memory.SharedMemory(
-    create=True,
-    size=np.zeros((eeg_rows, eeg_cols), dtype=dtype).nbytes,
-    name='eeg_data'
-)
+# Create shared memory for the EEG data (only EEG channels, no timestamp)
+shm_eeg = shared_memory.SharedMemory(create=True, size=np.zeros((eeg_rows, eeg_cols), dtype=dtype).nbytes,
+                                     name='eeg_data')
 eeg_shared = np.ndarray((eeg_rows, eeg_cols), dtype=dtype, buffer=shm_eeg.buf)
-eeg_shared[:] = 0  # init to zeros
+# Initialize to zeros
+eeg_shared[:] = 0
 
-# Simple lock flag (0=not updating, 1=updating)
-shm_lock = shared_memory.SharedMemory(
-    create=True,
-    size=np.zeros((1,), dtype=np.int8).nbytes,
-    name='eeg_lock'
-)
+# %% Shared Memory Setup for a Simple Lock Flag
+# A one-element array; 0 means "not updating", 1 means "updating"
+shm_lock = shared_memory.SharedMemory(create=True, size=np.zeros((1,), dtype=np.int8).nbytes, name='eeg_lock')
 lock_flag = np.ndarray((1,), dtype=np.int8, buffer=shm_lock.buf)
-lock_flag[0] = 0
+lock_flag[0] = 0  # initial state: not updating
 
 # %% Existing Setup Code
+# t_init = int(datetime.datetime(2024, 3, 21, 15, 0, 0).timestamp())  # Year, Month, Day, Hour, Minutes
 t_init = int(datetime.datetime.now().timestamp())
-participant = 'EB-41'
-name = 'MuseS-6B97'
+# participant = '200'
+# name = 'MuseS-6408'
+windowLength_saving2csv=5 #5s
+#participant = 'EB-41'
+participant = 'EB-51' #XF
+#name = 'MuseS-6B97' # get it through  https://eegedu.com/
+name = 'MuseS-62E9' # get it through  https://eegedu.com/
 cwd = os.getcwd()
-
-# Path to your venv activate script
-venv_activate = os.path.join(cwd, 'venv', 'Scripts', 'activate.bat')
-# We'll invoke like: cmd /k "<venv_activate> & python DecNef_museS.py -p ..."
-
+venv_path = ''.join(['\"', os.path.join(cwd, 'venv', 'Scripts', 'activate.bat'), '\"'])
 data_folder = os.path.join(cwd, '..', 'Data')
-os.makedirs(data_folder, exist_ok=True)
-data_path = os.path.join(data_folder, f"sub-{participant}", "Muse_data_DecNef")
-os.makedirs(data_path, exist_ok=True)
+try:
+    os.makedirs(data_folder)
+except OSError as error:
+    print(error)
+#data_path_relative = os.path.join('..', 'Data', 'sub-' + participant, 'Muse_data')
+data_path_relative = os.path.join('..', 'Data', 'sub-' + participant, 'Muse_data_DecNef')
+data_path = os.path.join(cwd, data_path_relative)
+try:
+    os.makedirs(data_path)
+except OSError as error:
+    print(error)
 
-# LSL stream/record commands
-stream_cmd = f"muselsl stream -n {name} -p -c -g"
-record_base = f'muselsl record -s {t_init} -p {participant} -d "{data_path}" -t'
-
-filename = os.path.join(data_path, f"sub-{participant}_EEG_recording.csv")
-
-# -------------------------------------------------------------------------
-# 1) Launch the PsychoPy experiment and capture its stdout/stderr
-# -------------------------------------------------------------------------
-
-# Build our command: activate venv, then run experiment script
-exp_cmd = (
-    f'cmd /k "{venv_activate} & '
-    f'python DecNef_museS.py -p {participant} -s {t_init}"'
+data_path_quotes = '\"' + data_path + '\"'
+stream_command = ''.join(['muselsl stream -n ', name, ' -p -c -g'])
+record_command = (
+    f'muselsl record -s {t_init} '
+    f'-p {participant} '
+    f'-d "{data_path}" '
+    '-t'
 )
+# filename = os.path.join(data_path, "%s_%s_recording.csv" %
+#                         (''.join(['sub-', participant]),
+#                          'EEG'))
+#adding a time stamp to the filename
+filename = os.path.join(data_path, "%s_%s_recording_%s.csv" %
+                            (''.join(['sub-', participant]),
+                             'EEG',
+                             time.strftime('%Y-%m-%d-%H.%M.%S', time.localtime())))
 
-# Start the experiment process with pipes
-exp_proc = subprocess.Popen(
-    exp_cmd,
-    cwd=cwd,
-    shell=True,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    text=True,
-    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-)
+# for windows power shell/cmd
+# command = ''.join(
+#     ['start ', venv_path, ' ; .\\venv\\Scripts\\python.exe DecNef_museS.py -p ',
+#       participant, ' -s ', str(t_init)])
 
-def _stream_reader(pipe, tag):
-    """Continuously read lines from pipe and print them prefixed with tag."""
-    for line in iter(pipe.readline, ''):
-        print(f"[{tag}] {line}", end='')
-    pipe.close()
+# #4/25/2025, didn't work!
+# command = (
+#     f'start "" {venv_path} & '
+#     r'.\venv\Scripts\python.exe DecNef_museS.py '
+#     f'-p {participant} -s {t_init}'
+# )
+# p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+# time.sleep(5)
+# stream_p = muselsl.winctrlc.Popen(stream_command, cwd=cwd, shell=True)
+# time.sleep(15)
 
-# Spin up threads to forward stdout/stderr
-threading.Thread(target=_stream_reader, args=(exp_proc.stdout, "EXP-OUT"), daemon=True).start()
-threading.Thread(target=_stream_reader, args=(exp_proc.stderr, "EXP-ERR"), daemon=True).start()
-
-# Give the experiment a bit to start
+#6/11/2025
+command = ''.join(
+    ['start ', venv_path, ' ; .\\venv\\Scripts\\python.exe DecNef_museS.py -p ', participant, ' -s ', str(t_init)])
+print(command)
+p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+#p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, creationflags=subprocess.CREATE_NEW_CONSOLE) #for debugging
 time.sleep(5)
-
-# %% 2) Start your MuseSL streaming + recording pipelines
-stream_p = muselsl.winctrlc.Popen(stream_cmd, cwd)
+stream_p = muselsl.winctrlc.Popen(stream_command, cwd)
 time.sleep(15)
 
-ppg_p  = muselsl.winctrlc.Popen(record_base + ' PPG', cwd)
-acc_p  = muselsl.winctrlc.Popen(record_base + ' ACC', cwd)
-gyro_p = muselsl.winctrlc.Popen(record_base + ' GYRO', cwd)
+ppg_command = ''.join([record_command, ' PPG'])
+ppg_p = muselsl.winctrlc.Popen(ppg_command, cwd)
 
-[inlet, inlet_marker, marker_time_correction,
- chunk_length, ch, ch_names] = muselsl.start_record(t_init=t_init)
+acc_command = ''.join([record_command, ' ACC'])
+acc_p = muselsl.winctrlc.Popen(acc_command, cwd)
 
-# %% 3) Main Data Acquisition Loop
+gyro_command = ''.join([record_command, ' GYRO'])
+gyro_p = muselsl.winctrlc.Popen(gyro_command, cwd)
+
+[inlet, inlet_marker, marker_time_correction, chunk_length, ch, ch_names] = muselsl.start_record(t_init=t_init)
+
 res = []
 timestamps = []
 markers = []
@@ -109,11 +116,11 @@ flag = 0
 data_flag = 1
 time_correction = inlet.time_correction()
 last_written_timestamp = None
+print('Start recording at time t=%.3f' % t_init)
+print('Time correction: ', time_correction)
 
-print(f'Start recording at time t={t_init:.3f}')
-print('Time correction:', time_correction)
-
-while True:
+# %% Main Data Acquisition Loop with Shared Memory Update
+while 1:
     old_len = len(timestamps)
     flag += 1
     try:
@@ -121,61 +128,122 @@ while True:
         if timestamp:
             res.append(data)
             timestamps.extend(timestamp)
+            tr = time.time()
         if inlet_marker:
-            m, mt = inlet_marker.pull_sample(timeout=0.0)
-            if mt:
-                markers.append([m, mt + marker_time_correction])
-        # if experiment sent final marker, break
-        if markers and markers[-1][0] == [999]:
+            marker, marker_timestamp = inlet_marker.pull_sample(timeout=0.0)
+            if marker_timestamp:
+                markers.append([marker, marker_timestamp])
+                marker_timestamp = marker_timestamp + marker_time_correction
+        if marker == [999]:
             break
 
-        # periodic save every 5s
-        if last_written_timestamp is None or last_written_timestamp + 5 < timestamps[-1]:
+        # Save every 5s
+        if data_flag == 1:
+            pass
+        elif last_written_timestamp is None or last_written_timestamp + windowLength_saving2csv < timestamps[-1]:
             muselsl.save_ongoing(
-                res, timestamps, time_correction, False,
-                inlet_marker, markers, ch_names,
+                res,
+                timestamps,
+                time_correction,
+                False,
+                inlet_marker,
+                markers,
+                ch_names,
                 last_written_timestamp=last_written_timestamp,
-                participant=participant, filename=filename
+                participant=participant,
+                filename=filename
             )
             last_written_timestamp = timestamps[-1]
 
-        # update shared memory
-        if res:
-            all_data = np.concatenate(res, axis=0)  # (total_samples,5)
-            eeg_only = all_data[:, :4]
-            ts_arr = (np.array(timestamps) + time_correction).reshape(-1,1)
-            num_rows = int(12*256)
-            if eeg_only.shape[0] >= num_rows:
-                latest_eeg = eeg_only[-num_rows:]
-                latest_ts  = ts_arr[-num_rows:]
-            else:
-                pad = num_rows - eeg_only.shape[0]
-                latest_eeg = np.vstack((np.zeros((pad,4)), eeg_only))
-                latest_ts  = np.vstack((np.zeros((pad,1)), ts_arr))
-            latest_chunk = np.hstack((latest_eeg, latest_ts))
-            lock_flag[0] = 1
-            eeg_shared[:] = latest_chunk
-            lock_flag[0] = 0
+        if len(timestamps) > old_len:
+            flag = 0
+            if len(timestamps) > 256:
+                data_flag = np.sum(np.asarray(res[-1]))
 
+        # --- Update Shared Memory with Latest 12 Seconds of EEG Data (EEG channels + Timestamp) ---
+        if res:
+            # Concatenate all EEG data pulled from the stream.
+            all_data = np.concatenate(res, axis=0)  # shape: (total_samples, 5) [Note: the 5th column may be dummy]
+
+            # Extract EEG channels (first 4 columns).
+            eeg_only = all_data[:, 0:4]  # shape: (total_samples, 4)
+
+            # Convert the timestamps list to a column vector.
+            # Apply LSL time_correction so shared‐memory stamps match time.time()
+            timestamps_arr = (np.array(timestamps) + time_correction).reshape(-1, 1)
+            # shape: (total_samples, 1)
+
+            # Define the number of rows corresponding to 12 seconds at 256 Hz.
+            num_rows = int(12 * 256)  # 3072 rows
+
+            # Get the latest num_rows rows from the EEG data and corresponding timestamps.
+            if eeg_only.shape[0] >= num_rows:
+                latest_eeg = eeg_only[-num_rows:, :]
+                latest_timestamps = timestamps_arr[-num_rows:, :]
+            else:
+                pad_rows = num_rows - eeg_only.shape[0]
+                latest_eeg = np.vstack((np.zeros((pad_rows, 4), dtype=dtype), eeg_only))
+                latest_timestamps = np.vstack((np.zeros((pad_rows, 1), dtype=dtype), timestamps_arr))
+
+            # Combine the EEG data with the timestamps as the 5th column.
+            latest_chunk = np.hstack((latest_eeg, latest_timestamps))  # shape: (num_rows, 5)
+
+            # Update the shared memory with the new combined data.
+            lock_flag[0] = 1  # set lock: update in progress
+            eeg_shared[:] = latest_chunk
+            lock_flag[0] = 0  # clear lock
+
+        if data_flag != 0 and flag <= 5:
+            pass
+        else:
+            print(data_flag, flag, len(timestamps))
+            flag = 0
+            data_flag = 1
+            ppg_p.send_ctrl_c()
+            acc_p.send_ctrl_c()
+            gyro_p.send_ctrl_c()
+            while 1:
+                try:
+                    stream_p.send_ctrl_c()
+                    time.sleep(2)
+                except OSError as error:
+                    print(error)
+                    break
+            stream_p = muselsl.winctrlc.Popen(stream_command, cwd)
+            time.sleep(15)
+            ppg_p = muselsl.winctrlc.Popen(ppg_command, cwd)
+            acc_p = muselsl.winctrlc.Popen(acc_command, cwd)
+            gyro_p = muselsl.winctrlc.Popen(gyro_command, cwd)
     except KeyboardInterrupt:
         break
 
-# Final save
+# Final save of the remaining data
 muselsl.save_ongoing(
-    res, timestamps, time_correction, False,
-    inlet_marker, markers, ch_names,
+    res,
+    timestamps,
+    time_correction,
+    False,
+    inlet_marker,
+    markers,
+    ch_names,
     last_written_timestamp=last_written_timestamp,
-    participant=participant, filename=filename
+    participant=participant,
+    filename=filename
 )
 
-# shut down all subprocesses
 ppg_p.send_ctrl_c()
 acc_p.send_ctrl_c()
 gyro_p.send_ctrl_c()
-stream_p.send_ctrl_c()
-exp_proc.send_signal(subprocess.signal.CTRL_BREAK_EVENT)  # politely ask experiment to quit
-exp_proc.wait()
+while 1:
+    try:
+        stream_p.send_ctrl_c()
+        time.sleep(2)
+    except OSError as error:
+        print(error)
+        break
 
-# Cleanup shared memory
-shm_eeg.close(); shm_eeg.unlink()
-shm_lock.close(); shm_lock.unlink()
+# Cleanup shared memory objects
+shm_eeg.close()
+shm_eeg.unlink()
+shm_lock.close()
+shm_lock.unlink()

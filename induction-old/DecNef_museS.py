@@ -23,9 +23,8 @@ import time
 import random
 from pylsl import StreamInfo, StreamOutlet
 from multiprocessing import shared_memory
-import pickle #for traditional ML model
+import pickle
 import os
-import torch #for eegnet
 
 # add these two for the tkinter popup
 import tkinter as tk
@@ -36,24 +35,18 @@ info = StreamInfo('Markers', 'Markers', 1, 0, 'int32', 'myuidw43536')
 outlet = StreamOutlet(info)
 
 # choose model variant
-#ifUseTemplateBasedModel = 0  # regular ML 
-ifUseTemplateBasedModel = 1  # template matching
-ifUseTemplateBasedModel = 2  # EEGnet
-if ifUseTemplateBasedModel == 0:
+ifUseTemplateBasedModel = 0  # regular
+#ifUseTemplateBasedModel = 1  # template matching
+if ifUseTemplateBasedModel > 0:
     from DecNef_NF_predict_template import decoder_predict
-    model_path_template       = r"D:\decoder\dtw_model_exp_2_sub_1.pkl"
 else:
     from DecNef_NF_predict import decoder_predict
-    if ifUseTemplateBasedModel==1:
-        #model_path_plain          = r"D:\decoder\my_model_exp_2_sub_1.pkl"
-        model_path_plain          = r"D:\decoder\openCloseFistsFeet_model_exp_1_sub_1.pkl"
-    elif ifUseTemplateBasedModel==2:
-        model_path_plain = r"D:\decoder\best_fists_eegnet_model.pth" #open/close fists task
 
 # ----- Configuration Variables -----
-eeg_csv_path = r'D:\decoder\EB-Data\sub-EB-34\Muse_data\sub-EB-34_EEG_recording.csv'
+eeg_csv_path = r'D:\Faculty\ColumbiaUniversity\dataprocess\EEG\dataProcessing\Interaxon\museS\LSL\Python\muse-lsl-python\decoder\EB-Data\sub-EB-34\Muse_data\sub-EB-34_EEG_recording.csv'
 n_rows_for_prediction     = 256 * 2
-
+model_path_template       = r"D:\Faculty\ColumbiaUniversity\dataprocess\EEG\dataProcessing\Interaxon\museS\LSL\Python\muse-lsl-python\decoder\dtw_model_exp_2_sub_1.pkl"
+model_path_plain          = r"D:\Faculty\ColumbiaUniversity\dataprocess\EEG\dataProcessing\Interaxon\museS\LSL\Python\muse-lsl-python\decoder\my_model_exp_2_sub_1.pkl"
 model_path                = model_path_template if ifUseTemplateBasedModel > 0 else model_path_plain
 
 eye_blinking_count = 0
@@ -92,26 +85,12 @@ def safe_quit(win):
 
 def load_model():
     """Load and return the pickled model (or None on fail)."""
-    # try:
-    #     with open(model_path, 'rb') as f:
-    #         return pickle.load(f)
-    # except Exception as e:
-    #     print("Model load error:", e)
-    #     return None
-    #hxf 8/11/2025
     try:
-        if model_path.endswith(".pth"): #it's a pytorch model format
-            # Set device    
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            with open(model_path, 'rb') as f:
-                return torch.load(f, map_location=device) #for eegnet
-        else: #traditional ML model    
-            with open(model_path, 'rb') as f:
-                return pickle.load(f)
+        with open(model_path, 'rb') as f:
+            return pickle.load(f)
     except Exception as e:
         print("Model load error:", e)
-        return None 
-
+        return None
 
 def predict_segment(segment_2s, model):
     """Run one 2 s segment (512×4) through decoder_predict."""
@@ -197,25 +176,18 @@ def show_result(win, prob, label, duration):
 def trial_experiment():
     global eye_blinking_count
 
-    #method1: use PsychoPy
-    dlg = gui.Dlg(title='Neurofeedback Experiment')
-    dlg.addText('Click OK to proceed to the experiment.')
-    result = dlg.show()
-    if result is None:
+    # ---- replace PsychoPy Dlg with tkinter popup ----
+    root = tk.Tk()
+    root.withdraw()
+    ok = messagebox.askokcancel(
+        "Neurofeedback Experiment",
+        "Click OK to proceed to the experiment."
+    )
+    root.destroy()
+    if not ok:
         core.quit()
-    win = visual.Window(fullscr=True, color='grey', units='norm')
 
-    # #method2: ---- replace PsychoPy Dlg with tkinter popup ----
-    # root = tk.Tk()
-    # root.withdraw()
-    # ok = messagebox.askokcancel(
-    #     "Neurofeedback Experiment",
-    #     "Click OK to proceed to the experiment."
-    # )
-    # root.destroy()
-    # if not ok:
-    #     core.quit()
-    # win = visual.Window(fullscr=True, color='grey', units='norm')
+    win = visual.Window(fullscr=True, color='grey', units='norm')
 
     # --- Welcome Page ---
     welcome = visual.TextStim(

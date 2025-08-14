@@ -5,13 +5,14 @@ import json
 
 # Import custom modules
 from dataset import TwoChannelEEGDataset, EEGNetDataset
-from eegnet_model import TwoChannelLSTMClassifier, create_eegnet_model
+from model import TwoChannelLSTMClassifier, create_eegnet_model
 from utils import set_all_seeds
 from training import train_eegnet_model
 from evaluation import evaluate_simple_model, plot_results, print_classification_results
 
 
-def main(train_para,test_para,segment_len,exp_number=1):
+
+def main(exp_number=1):
     # Set random seeds for reproducibility
     set_all_seeds(42)
     
@@ -28,11 +29,11 @@ def main(train_para,test_para,segment_len,exp_number=1):
 
     dataset = TwoChannelEEGDataset(
         # Data directory - modify this path as needed
-        data_dir = train_para["dataset_path"],
+        data_dir = r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session1",
         exp_number=exp_number,
-        run_number=train_para["run_number"],  # load runs
+        run_number=[2],  # load runs
         task=task,
-        window_size=segment_len,
+        window_size=1024,
         debug=False,
         normalize=True
         )
@@ -47,12 +48,12 @@ def main(train_para,test_para,segment_len,exp_number=1):
 
     test_dataset = TwoChannelEEGDataset(
         # Used for cross session
-        data_dir=test_para["dataset_path"],
+        data_dir=r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session2",
         #data_dir=data_dir,
         exp_number=exp_number,
-        run_number=test_para["run_number"],
+        run_number=[1],  # load runs
         task=task,
-        window_size=segment_len,
+        window_size=1024,
         debug=False,
         normalize=True
     )
@@ -80,7 +81,7 @@ def main(train_para,test_para,segment_len,exp_number=1):
     val_loader = DataLoader(eegnet_val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(eegnet_test_dataset, batch_size=batch_size, shuffle=False)
 
-    model = create_eegnet_model(task_type='binary', num_classes=1, samples=segment_len).to(device)
+    model = create_eegnet_model(task_type='binary', num_classes=1, samples=1024).to(device)
 
     train_losses, val_losses, best_acc = train_eegnet_model(model, train_loader, val_loader, device, epochs=700, lr=0.001, experiment_name=experiment_name)
 
@@ -90,30 +91,11 @@ def main(train_para,test_para,segment_len,exp_number=1):
     # Print results
     print_classification_results(labels, preds, probs, name=experiment_name)
 
-    # Plot and save the train&val loss and rest dataset results
-    auc_score = plot_results(train_losses, val_losses, labels, preds, probs, f'{experiment_name}_trainValLoss_testResult.png')
-
-    # plot and save the validation results
-    print("plot and save the validation results")
-    labels_val, preds_val, probs_val = evaluate_simple_model(model, val_loader, device)
-    print_classification_results(labels_val, preds_val, probs_val, name=experiment_name)
-    auc_score = plot_results(train_losses, val_losses, labels_val, preds_val, probs_val, f'{experiment_name}_trainValLoss_valResult.png')
+    # Plot and save results
+    auc_score = plot_results(train_losses, val_losses, labels, preds, probs, f'{experiment_name}_train_result.png')
 
 
 if __name__ == "__main__":
     torch.cuda.empty_cache()
-    # train_dataset_path=r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session1"
-    # test_dataset_path=r"C:\Users\xhe\Documents\GitHub\DecNef-EEG\decoder\data\session2"      
-    train_dataset_path=r"D:\decoder\Data\sub-EB-43\Muse_data_OpenCloseFistsFeet_session1_segmented"
-    test_dataset_path=r"D:\decoder\Data\sub-EB-43\Muse_data_OpenCloseFists_session2_segmented"      
-    train_para = {
-    "dataset_path": train_dataset_path,
-    "run_number": [2] #second run for training
-    }
-    test_para = {
-    "dataset_path": test_dataset_path,
-    "run_number": [1] #first run for testing
-    }
-    segment_len=1024 #4s, sampling rate: 256hz 
-    main(train_para,test_para,segment_len,exp_number=1) #open/close fists
-    # main(train_para,test_para,segment_len,exp_number=2) #open/close feet
+    main(exp_number=1)
+    # main(exp_number=2)
